@@ -13,8 +13,8 @@ typedef struct log_acesso {
     uint8_t minuto;
     uint8_t segundo;
 
-    // -1: log apagado, 0: acesso negado, 1: acesso permitido
-    int8_t status;
+    // acesso permitido ou acesso negado
+    bool permitido;
 } LogAcesso;
 
 void imprimir_log(LogAcesso *log) {
@@ -25,7 +25,7 @@ void imprimir_log(LogAcesso *log) {
     Serial.println(log->hora);
     Serial.println(log->minuto);
     Serial.println(log->segundo);
-    Serial.println(log->status);
+    Serial.println(log->permitido);
     Serial.println("------------");
 }
 
