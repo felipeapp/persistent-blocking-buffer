@@ -31,37 +31,60 @@ void imprimir_log(LogAcesso *log) {
 
 PersistentBlockingBuffer<LogAcesso> buffer;
 
-void setup() {
-    Serial.begin(115200);
-    buffer.begin("ssc-log-acesso", MAX_LOG_ACCESS_RECORDS);
-}
-
-bool adicionar = true;
-
-void loop() {
-    buffer.list("ssc-log-acesso", MAX_LOG_ACCESS_RECORDS, &imprimir_log);
-    Serial.println("=============");
-
-    delay(2000);
-
+void producer(void *p) {
     LogAcesso log;
     log.tag = 9999;
 
-    if (adicionar) {
-        if (buffer.add(&log)) {
+    while (true) {
+        delay(random(0, 1000));
+
+        if (buffer.add(&log))
             Serial.println("Added!");
-            adicionar = true;
-        } else {
-            Serial.println("Not added!");
-            adicionar = false;
-        }
-    } else {
-        if (buffer.remove()) {
-            Serial.println("Removed");
-            adicionar = false;
-        } else {
-            Serial.println("Not removed!");
-            adicionar = true;
-        }
+        else
+            Serial.println("Buffer is full!");
     }
+}
+
+void consumer(void *p) {
+    LogAcesso log;
+
+    while (true) {
+        delay(random(0, 1000));
+
+        buffer.get(&log);
+        Serial.printf("Get %llu\n\r", log.tag);
+
+        if (buffer.remove())
+            Serial.println("Removed!");
+        else
+            Serial.println("Buffer is empty!");
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    buffer.begin("ssc-log-acesso", MAX_LOG_ACCESS_RECORDS);
+
+    xTaskCreatePinnedToCore(
+        producer,         /* Function to implement the task */
+        "producer",       /* Name of the task */
+        2048,             /* Stack size in words */
+        NULL,             /* Task input parameter */
+        tskIDLE_PRIORITY, /* Priority of the task */
+        NULL,             /* Task handle. */
+        PRO_CPU_NUM);     /* Core where the task should run */
+
+    xTaskCreatePinnedToCore(
+        consumer,         /* Function to implement the task */
+        "consumer",       /* Name of the task */
+        2048,             /* Stack size in words */
+        NULL,             /* Task input parameter */
+        tskIDLE_PRIORITY, /* Priority of the task */
+        NULL,             /* Task handle. */
+        APP_CPU_NUM);     /* Core where the task should run */
+}
+
+void loop() {
+    delay(500);
+    buffer.list(&imprimir_log);
 }

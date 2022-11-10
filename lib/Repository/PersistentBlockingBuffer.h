@@ -6,6 +6,7 @@
 template <class T>
 class PersistentBlockingBuffer {
   private:
+    SemaphoreHandle_t mutex;
     Preferences preferences;
 
     uint8_t head;
@@ -26,7 +27,7 @@ class PersistentBlockingBuffer {
     bool remove();
     bool add(T *element);
 
-    static void list(const char *namespace_key, const uint8_t capacity, void (*print_func)(T *));
+    void list(void (*print_func)(T *));
 };
 
 template <class T>
@@ -39,6 +40,9 @@ PersistentBlockingBuffer<T>::~PersistentBlockingBuffer() {
 
 template <class T>
 void PersistentBlockingBuffer<T>::begin(const char *namespace_key, const uint8_t capacity) {
+    mutex = xSemaphoreCreateMutex();
+    assert(mutex);
+
     this->capacity = capacity;
     strcpy(this->namespace_key, namespace_key);
     memset(this->index_key, 0, sizeof(this->index_key));
@@ -52,16 +56,22 @@ void PersistentBlockingBuffer<T>::begin(const char *namespace_key, const uint8_t
 
 template <class T>
 void PersistentBlockingBuffer<T>::get(T *element) {
+    xSemaphoreTake(mutex, portMAX_DELAY);
+
     if (this->length > 0) {
         preferences.begin(this->namespace_key, true);
         preferences.getBytes(utoa(this->head, this->index_key, 10), element, sizeof(T));
         preferences.end();
     }
+
+    xSemaphoreGive(mutex);
 }
 
 template <class T>
 bool PersistentBlockingBuffer<T>::remove() {
     bool success = false;
+
+    xSemaphoreTake(mutex, portMAX_DELAY);
 
     if (this->length > 0) {
         preferences.begin(this->namespace_key, false);
@@ -75,12 +85,16 @@ bool PersistentBlockingBuffer<T>::remove() {
         preferences.end();
     }
 
+    xSemaphoreGive(mutex);
+
     return success;
 }
 
 template <class T>
 bool PersistentBlockingBuffer<T>::add(T *element) {
     bool success = false;
+
+    xSemaphoreTake(mutex, portMAX_DELAY);
 
     if (this->length < this->capacity) {
         preferences.begin(this->namespace_key, false);
@@ -96,31 +110,18 @@ bool PersistentBlockingBuffer<T>::add(T *element) {
         preferences.end();
     }
 
+    xSemaphoreGive(mutex);
+
     return success;
 }
 
 template <class T>
-void PersistentBlockingBuffer<T>::list(const char *namespace_key, const uint8_t capacity, void (*print_func)(T *)) {
-    Preferences prefs;
-    char index_key[4] = {'\0'};
-    T buffer;
-
-    prefs.begin(namespace_key, true);
-
-    Serial.printf("Head: %u | Next: %u | Length: %u\n\r", prefs.getUChar("head", 0), prefs.getUChar("next", 0), prefs.getUChar("length", 0));
-
-    // for (uint8_t i = 0; i < capacity; i++) {
-    //     if (prefs.isKey(utoa(i, index_key, 10))) {
-    //         prefs.getBytes(index_key, &buffer, sizeof(T));
-
-    //         Serial.printf("Key: %u\n\r", i);
-    //         print_func(&buffer);
-    //     } else {
-    //         Serial.printf("Empty Key: %u\n\r", i);
-    //     }
-    // }
-
-    prefs.end();
+void PersistentBlockingBuffer<T>::list(void (*print_func)(T *)) {
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    preferences.begin(namespace_key, true);
+    Serial.printf("Head: %u | Next: %u | Length: %u\n\r", preferences.getUChar("head", 0), preferences.getUChar("next", 0), preferences.getUChar("length", 0));
+    preferences.end();
+    xSemaphoreGive(mutex);
 }
 
 #endif
